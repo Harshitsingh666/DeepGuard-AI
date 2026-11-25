@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepGuard AI — Multimodal Deepfake Detection & Media Verification</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js for Dashboard Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- jsPDF for Downloadable Forensic Reports -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- QRCode.js for Tamper-Evident Verification QR Codes -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- PDF.js & Mammoth.js for Multi-Format Document Extraction (.pdf & .docx) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+
+  <script src="./js/tailwind-config.js"></script>
+
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body class="min-h-screen flex flex-col selection:bg-cyan-400 selection:text-slate-950">
+
+  <!-- Non-Blocking Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Custom Confirmation Modal -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="glass-card rounded-2xl max-w-md w-full p-6 border border-cyan-500/30">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+        </div>
+        <h3 id="confirm-title" class="text-lg font-bold text-white">Confirm Action</h3>
+      </div>
+      <p id="confirm-message" class="text-sm text-slate-300 mb-6 leading-relaxed">Are you sure you want to proceed?</p>
+      <div class="flex justify-end gap-3">
+        <button id="confirm-cancel-btn" class="px-4 py-2 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition">Cancel</button>
+        <button id="confirm-ok-btn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white transition">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analyst Authentication Modal -->
+  <div id="auth-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+    <div class="glass-card rounded-2xl max-w-md w-full p-6 sm:p-7 border border-cyan-500/30 relative">
+      <button onclick="HistoryStore.closeAuthModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800/70 transition" aria-label="Close">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-400/30 flex items-center justify-center text-cyan-400">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">Analyst Workspace Login</h3>
+          <p class="text-xs text-slate-400">Isolates your forensic scan history &amp; reports locally</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 mb-5">
+        <button id="tab-login" onclick="HistoryStore.switchAuthTab('login')" class="py-2 rounded-lg text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 transition">Sign In</button>
+        <button id="tab-signup" onclick="HistoryStore.switchAuthTab('signup')" class="py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">Create Account</button>
+      </div>
+
+      <form id="auth-form" onsubmit="HistoryStore.handleAuthSubmit(event)" class="space-y-4">
+        <div id="auth-name-group" class="hidden">
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">Full Name / Analyst Alias</label>
+          <input type="text" id="auth-name" placeholder="e.g., Aarav Sharma" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-sm text-white focus:outline-none focus:border-cyan-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">Work or Academic Email</label>
+          <input type="email" id="auth-email" required placeholder="analyst@deepguard.ai" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-sm text-white focus:outline-none focus:border-cyan-400" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">Passphrase (SHA-256 Hashed Locally)</label>
+          <input type="password" id="auth-password" required minlength="6" placeholder="••••••••" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-sm text-white focus:outline-none focus:border-cyan-400" />
+        </div>
+        <button type="submit" id="auth-submit-btn" class="w-full py-2.5 rounded-xl cyber-btn-primary text-sm">Authenticate Session</button>
+      </form>
+
+      <div id="logged-in-panel" class="hidden space-y-4">
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-cyan-500/20">
+          <p class="text-xs text-slate-400">Active Authenticated Session</p>
+          <p id="active-user-name" class="text-base font-bold text-white mt-0.5">—</p>
+          <p id="active-user-email" class="text-xs font-mono text-cyan-400 mt-0.5">—</p>
+          <p class="text-[11px] text-emerald-400 mt-2 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+            Private Scan History Partition Active
+          </p>
+        </div>
+        <button onclick="HistoryStore.logoutUser()" class="w-full py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-sm font-semibold transition">Sign Out &amp; Switch to Guest Sandbox</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Verification Modal -->
+  <div id="qr-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+    <div class="glass-card rounded-2xl max-w-md w-full p-6 border border-cyan-500/30 text-center">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-bold text-white">Forensic Verification QR</h3>
+        <button onclick="document.getElementById('qr-modal').classList.add('hidden'); document.getElementById('qr-modal').classList.remove('flex');" class="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white">✕</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Share cryptographic report verification metadata without exposing your original media file.</p>
+      <div id="qr-modal-target" class="bg-white p-3.5 rounded-2xl inline-block mx-auto mb-3"></div>
+      <p id="qr-modal-caption" class="text-[11px] font-mono text-cyan-300 break-all bg-slate-950 p-2.5 rounded-xl border border-slate-800"></p>
+    </div>
+  </div>
+
+  <!-- Scan Detail Inspection Modal -->
+  <div id="detail-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto">
+    <div class="glass-card rounded-2xl max-w-3xl w-full p-6 border border-cyan-500/30 my-8 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+        <div>
+          <span id="modal-detail-id" class="text-xs font-mono text-cyan-400">DG-2026-000000</span>
+          <h3 id="modal-detail-title" class="text-lg font-bold text-white mt-0.5">Forensic Analysis Record</h3>
+        </div>
+        <button onclick="HistoryStore.closeDetailModal()" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="detail-modal-body" class="mt-4 space-y-4"></div>
+    </div>
+  </div>
+
+  <!-- Mobile Slide-Out Navigation Drawer -->
+  <div id="mobile-drawer-backdrop" onclick="UIController.closeMobileDrawer()" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm lg:hidden"></div>
+  <aside id="mobile-drawer-panel" class="fixed top-0 left-0 bottom-0 z-50 w-72 bg-[#060B19] border-r border-cyan-500/25 p-5 flex flex-col justify-between transform -translate-x-full lg:hidden">
+    <div>
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-400/40 flex items-center justify-center text-cyan-400 font-bold text-sm">DG</div>
+          <span class="font-extrabold text-white">DeepGuard <span class="text-cyan-400">AI</span></span>
+        </div>
+        <button onclick="UIController.closeMobileDrawer()" class="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white" aria-label="Close Drawer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <nav class="mt-4 space-y-1 text-sm">
+        <button data-nav="home" onclick="UIController.navigateTo('home')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">1. Home</button>
+        <button data-nav="video" onclick="UIController.navigateTo('video')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">2. Video &amp; Lip-Sync Detector</button>
+        <button data-nav="voice" onclick="UIController.navigateTo('voice')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">3. Voice &amp; Mic Detector</button>
+        <button data-nav="image" onclick="UIController.navigateTo('image')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">4. Image ELA &amp; AI Detector</button>
+        <button data-nav="doclink" onclick="UIController.navigateTo('doclink')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">5. Document &amp; Link Verifier</button>
+        <button data-nav="dashboard" onclick="UIController.navigateTo('dashboard')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">6. Analysis Dashboard</button>
+        <button data-nav="verify" onclick="UIController.navigateTo('verify')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">7. Media &amp; C2PA Verification</button>
+        <button data-nav="history" onclick="UIController.navigateTo('history')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">8. Scan History</button>
+        <button data-nav="awareness" onclick="UIController.navigateTo('awareness')" class="nav-pill block w-full text-left px-3.5 py-2.5 rounded-xl">9. Awareness &amp; Architecture</button>
+      </nav>
+    </div>
+
+    <div class="pt-4 border-t border-slate-800 space-y-2 text-xs">
+      <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 font-mono text-[11px] text-cyan-300" id="mobile-ml-status">
+        Engine: local signals ready · image model optional
+      </div>
+    </div>
+  </aside>
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 border-b border-cyan-500/15 bg-[#050914]/90 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="flex items-center justify-between h-16 gap-3">
+        <!-- Brand Logo + Mobile Drawer Trigger -->
+        <div class="flex items-center gap-2.5">
+          <button onclick="UIController.openMobileDrawer()" class="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-200 hover:text-cyan-400" aria-label="Open Navigation Drawer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+          </button>
+
+          <button onclick="UIController.navigateTo('home')" class="flex items-center gap-3 text-left group shrink-0">
+            <div class="relative w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 via-blue-600/20 to-purple-600/20 border border-cyan-400/40 flex items-center justify-center shadow-lg shadow-cyan-500/10 group-hover:border-cyan-300 transition">
+              <svg class="w-6 h-6 text-cyan-400" viewBox="0 0 32 32" fill="none">
+                <path d="M16 2.5L4.5 7.5V15.5C4.5 22.8 9.4 29.4 16 31C22.6 29.4 27.5 22.8 27.5 15.5V7.5L16 2.5Z" stroke="url(#dg-grad)" stroke-width="2.2" fill="rgba(0,210,255,0.08)"/>
+                <path d="M9.5 16C11.3 13.2 13.5 11.8 16 11.8C18.5 11.8 20.7 13.2 22.5 16C20.7 18.8 18.5 20.2 16 20.2C13.5 20.2 11.3 18.8 9.5 16Z" stroke="#00D2FF" stroke-width="1.8"/>
+                <circle cx="16" cy="16" r="2.3" fill="#8B5CF6"/>
+                <defs>
+                  <linearGradient id="dg-grad" x1="4" y1="2" x2="28" y2="31" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#00D2FF"/>
+                    <stop offset="1" stop-color="#8B5CF6"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-extrabold text-base sm:text-lg tracking-tight text-white">DeepGuard <span class="text-cyan-400">AI</span></span>
+                <span class="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-400/30">v3.0 ML</span>
+              </div>
+              <p class="text-[10px] text-slate-400 hidden sm:block tracking-wide">LOCAL SIGNALS + MEDIAPIPE + OPTIONAL IMAGE MODEL</p>
+            </div>
+          </button>
+        </div>
+
+        <!-- Right Controls: AI Engine Status & Model Cache Pill + Language + Auth -->
+        <div class="flex items-center gap-2 sm:gap-2.5">
+          <!-- AI Engine Status & Model Cache Indicator -->
+          <button onclick="WorkerML.warmUpModels()" id="ml-status-pill" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/95 hover:bg-slate-800 border border-cyan-500/30 text-[11px] font-mono text-cyan-300 transition" title="Load the pinned 43.7 MB Detectra image model and MediaPipe landmarks">
+            <span id="ml-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="ml-status-text">Image model: optional · 43.7 MB</span>
+          </button>
+
+          <!-- Language Toggle (English / Hindi) -->
+          <button onclick="UIController.toggleLanguage()" class="px-2.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs font-semibold text-cyan-300 transition flex items-center gap-1.5" title="Switch Language">
+            <span id="lang-label">EN / हिंदी</span>
+          </button>
+
+          <!-- Analyst Auth Button -->
+          <button onclick="HistoryStore.openAuthModal()" class="px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/35 text-xs font-semibold text-cyan-200 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+            <span id="nav-user-label">Analyst Login</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Model Download Progress Strip -->
+      <div id="ml-progress-strip" class="hidden pb-2.5">
+        <div class="flex items-center justify-between text-[11px] font-mono text-cyan-300 mb-1">
+          <span id="ml-progress-label">Loading browser model...</span>
+          <span id="ml-progress-pct">0%</span>
+        </div>
+        <div class="w-full h-1.5 rounded-full bg-slate-900 overflow-hidden">
+          <div id="ml-progress-bar" class="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 transition-all duration-150" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Desktop 9-Tab Navigation Strip -->
+      <nav id="desktop-nav" class="hidden lg:flex items-center gap-1 pb-2.5 overflow-x-auto no-scrollbar text-xs font-medium">
+        <button data-nav="home" onclick="UIController.navigateTo('home')" class="nav-pill px-3 py-1.5 rounded-lg transition">Home</button>
+        <button data-nav="video" onclick="UIController.navigateTo('video')" class="nav-pill px-3 py-1.5 rounded-lg transition">Video &amp; Lip-Sync</button>
+        <button data-nav="voice" onclick="UIController.navigateTo('voice')" class="nav-pill px-3 py-1.5 rounded-lg transition">Voice &amp; Mic Detector</button>
+        <button data-nav="image" onclick="UIController.navigateTo('image')" class="nav-pill px-3 py-1.5 rounded-lg transition">Image ELA &amp; AI</button>
+        <button data-nav="doclink" onclick="UIController.navigateTo('doclink')" class="nav-pill px-3 py-1.5 rounded-lg transition">Doc &amp; Link Verifier</button>
+        <button data-nav="dashboard" onclick="UIController.navigateTo('dashboard')" class="nav-pill px-3 py-1.5 rounded-lg transition">Analysis Dashboard</button>
+        <button data-nav="verify" onclick="UIController.navigateTo('verify')" class="nav-pill px-3 py-1.5 rounded-lg transition">Media &amp; C2PA</button>
+        <button data-nav="history" onclick="UIController.navigateTo('history')" class="nav-pill px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+          <span>Scan History</span>
+          <span id="nav-history-badge" class="px-1.5 py-0.2 rounded-full bg-slate-800 text-[10px] font-mono text-cyan-300">0</span>
+        </button>
+        <button data-nav="awareness" onclick="UIController.navigateTo('awareness')" class="nav-pill px-3 py-1.5 rounded-lg transition">Awareness &amp; Docs</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+    <!-- ==================== VIEW 1: HOME ==================== -->
+    <section id="view-home" class="app-view space-y-10">
+      <div class="glass-card rounded-3xl p-6 sm:p-10 lg:p-12 relative overflow-hidden border border-cyan-500/25">
+        <div class="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-purple-600/15 blur-3xl pointer-events-none"></div>
+
+        <div class="grid lg:grid-cols-12 gap-8 items-center relative z-10">
+          <div class="lg:col-span-7 space-y-6">
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 text-xs font-mono">
+              <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+              <span data-i18n="hero_tag">LOCAL MEDIA SIGNALS + MEDIAPIPE + OPTIONAL IMAGE MODEL</span>
+            </div>
+
+            <h1 data-i18n="hero_headline" class="text-3xl sm:text-5xl lg:text-[3.2rem] font-extrabold leading-[1.12] tracking-tight cyber-gradient-text">
+              Don't Trust What You See. Verify What You Hear.
+            </h1>
+
+            <p data-i18n="hero_sub" class="text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl">
+              Review media with browser-based signal analysis, metadata checks, and optional AI models. Your files stay on your device; optional model files are fetched from public CDNs. Results are indicators for review, not proof of authenticity or manipulation.
+            </p>
+
+            <div class="flex flex-wrap items-center gap-3.5 pt-1">
+              <button onclick="UIController.navigateTo('video')" class="cyber-btn-primary px-6 py-3.5 rounded-xl text-sm sm:text-base flex items-center gap-2">
+                <span data-i18n="btn_start">Start Detection</span>
+              </button>
+          <button onclick="WorkerML.warmUpModels()" class="px-5 py-3.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-purple-400/40 text-purple-200 font-semibold text-sm transition flex items-center gap-2">
+                <span>Preload Image Model · 43.7 MB</span>
+              </button>
+            </div>
+
+            <div class="pt-2 flex flex-wrap items-center gap-4 text-xs text-slate-400 font-mono">
+              <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> WebGPU / WASM Image Model</span>
+              <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> 478-Landmark AV Lip-Sync</span>
+              <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> PDF.js + Mammoth.js Parser</span>
+            </div>
+
+            <p class="max-w-2xl border-l-2 border-cyan-400/60 pl-3 text-xs leading-relaxed text-slate-400">
+              <strong class="font-semibold text-slate-300">A note on results:</strong> Scores are heuristic signals, not calibrated probabilities. Illustrated or animated style alone does not indicate AI generation or tampering.
+            </p>
+          </div>
+
+          <div class="lg:col-span-5">
+            <div class="glass-card rounded-2xl p-5 border border-cyan-400/25 space-y-3">
+              <div class="flex items-center justify-between text-xs font-mono text-slate-400">
+                <span class="flex items-center gap-2 text-cyan-300">
+                  <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                  MULTIMODAL TELEMETRY RADAR
+                </span>
+              <span>LOCAL FILE ANALYSIS</span>
+              </div>
+              <canvas id="hero-radar-canvas" class="w-full h-52 rounded-xl bg-[#040812] border border-slate-800/90"></canvas>
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <p class="text-[10px] font-mono text-slate-400">VIDEO MESH</p>
+                  <p class="text-xs font-bold text-cyan-300 mt-0.5">478 Landmarks</p>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <p class="text-[10px] font-mono text-slate-400">AUDIO STFT</p>
+                  <p class="text-xs font-bold text-purple-300 mt-0.5">2D Spectrogram</p>
+                </div>
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <p class="text-[10px] font-mono text-slate-400">ANIME / CGI</p>
+                  <p class="text-xs font-bold text-rose-300 mt-0.5">Style signal</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Core Module Cards -->
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div onclick="UIController.navigateTo('video')" class="glass-card glass-card-hover rounded-2xl p-6 cursor-pointer flex flex-col justify-between">
+          <div>
+            <span class="text-[11px] font-mono text-cyan-400">MODULE 01</span>
+            <h3 class="text-lg font-bold text-white mt-1">Video &amp; Lip-Sync</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">Extracts 12 keyframes with 96×64 thumbnails, tracks MediaPipe jawOpen/mouthClose landmarks, and cross-correlates speech RMS energy.</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-xs font-mono text-cyan-400 flex justify-between"><span>MP4 • WEBM • MOV</span><span>Open →</span></div>
+        </div>
+
+        <div onclick="UIController.navigateTo('voice')" class="glass-card glass-card-hover rounded-2xl p-6 cursor-pointer flex flex-col justify-between">
+          <div>
+            <span class="text-[11px] font-mono text-purple-400">MODULE 02</span>
+            <h3 class="text-lg font-bold text-white mt-1">Voice &amp; Mic Spectrogram</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">Multi-window FFT spectral analysis and a 2D STFT spectrogram highlighting possible vocoder cutoffs.</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-xs font-mono text-purple-400 flex justify-between"><span>MP3 • WAV • SAFARI MIC</span><span>Open →</span></div>
+        </div>
+
+        <div onclick="UIController.navigateTo('image')" class="glass-card glass-card-hover rounded-2xl p-6 cursor-pointer flex flex-col justify-between">
+          <div>
+            <span class="text-[11px] font-mono text-blue-400">MODULE 03</span>
+            <h3 class="text-lg font-bold text-white mt-1">Image ELA &amp; Visual Signals</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">Compares visual-style and JPEG recompression signals to help focus a closer review.</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-xs font-mono text-blue-400 flex justify-between"><span>JPG • PNG • WEBP</span><span>Open →</span></div>
+        </div>
+
+        <div onclick="UIController.navigateTo('doclink')" class="glass-card glass-card-hover rounded-2xl p-6 cursor-pointer flex flex-col justify-between">
+          <div>
+            <span class="text-[11px] font-mono text-emerald-400">MODULE 04</span>
+            <h3 class="text-lg font-bold text-white mt-1">PDF/DOCX &amp; Link Verifier</h3>
+            <p class="text-xs text-slate-400 mt-2 leading-relaxed">Parses PDF &amp; Word files via PDF.js/Mammoth, highlights uniform AI-patterned sentences, and inspects URL homographs.</p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-800 text-xs font-mono text-emerald-400 flex justify-between"><span>PDF • DOCX • URL</span><span>Open →</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: VIDEO & LIP-SYNC DETECTOR ==================== -->
+    <section id="view-video" class="app-view hidden space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <span class="text-xs font-mono text-cyan-400">MODULE 01 // 12-KEYFRAME MEDIAPIPE 478-MESH &amp; AV LIP-SYNC</span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Video &amp; Reel Deepfake Detector</h2>
+          <p class="text-sm text-slate-400 mt-1">Extracts 12 keyframes (96×64 thumbnails), tracks facial landmarks &amp; jawOpen aperture, detects anime/cartoon frames, and correlates speech RMS.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="VideoForensics.generateSample('manipulated')" class="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-xs font-semibold text-rose-300 transition">Test Sample: Desynced Clip</button>
+          <button onclick="VideoForensics.generateSample('anime')" class="px-3.5 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-xs font-semibold text-purple-300 transition">Test Sample: Anime / Cartoon</button>
+          <button onclick="VideoForensics.generateSample('authentic')" class="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-xs font-semibold text-emerald-300 transition">Test Sample: Natural Sync</button>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 glass-card rounded-2xl p-6">
+          <div id="video-dropzone" class="border-2 border-dashed border-slate-700 hover:border-cyan-400/60 rounded-2xl p-8 text-center transition cursor-pointer" onclick="document.getElementById('video-file-input').click()">
+            <input type="file" id="video-file-input" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/*" class="hidden" onchange="VideoForensics.handleUpload(event)" />
+            <div class="w-14 h-14 rounded-2xl bg-cyan-500/15 border border-cyan-400/30 flex items-center justify-center text-cyan-400 mx-auto mb-4">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+            </div>
+            <p class="text-base font-bold text-white">Drop Video or Downloaded Reel Here</p>
+            <p class="text-xs text-slate-400 mt-1">Supports MP4, WEBM, MOV, AVI (Max 150 MB)</p>
+            <button type="button" class="mt-4 px-4 py-2 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-xs font-semibold text-cyan-200">Select Video File</button>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-mono text-purple-400 font-semibold">LIVE WEBCAM CAPTURE</span>
+              <span id="webcam-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+            </div>
+            <h3 class="text-base font-bold text-white">Real-Time Camera Check</h3>
+            <p class="text-xs text-slate-400 mt-1">Captures a 4s live stream for facial landmark &amp; lip-sync verification.</p>
+          </div>
+          <div class="my-3 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 h-32 flex items-center justify-center">
+            <video id="webcam-preview" autoplay muted playsinline class="w-full h-full object-cover hidden"></video>
+            <span id="webcam-placeholder" class="text-xs font-mono text-slate-500">Camera Standby</span>
+          </div>
+          <button id="webcam-record-btn" onclick="VideoForensics.captureWebcam()" class="w-full py-2.5 rounded-xl bg-purple-600/25 hover:bg-purple-600/35 border border-purple-400/40 text-purple-200 text-xs font-semibold transition">Capture 4s Live Feed</button>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div id="video-progress-box" class="hidden glass-card rounded-2xl p-5 border border-cyan-400/40">
+        <div class="flex items-center justify-between text-xs font-mono mb-2">
+          <span id="video-progress-label" class="text-cyan-300">Extracting 12 keyframes...</span>
+          <span id="video-progress-pct" class="text-white font-bold">0%</span>
+        </div>
+        <div class="w-full h-2.5 rounded-full bg-slate-900 overflow-hidden">
+          <div id="video-progress-bar" class="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 transition-all duration-150" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Video Results Workspace -->
+      <div id="video-results-container" class="hidden space-y-6">
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-7 glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white">Forensic Player &amp; 12-Keyframe Thumbnail Timeline</h3>
+              <span id="video-current-time-badge" class="text-xs font-mono px-2.5 py-1 rounded bg-slate-900 text-cyan-300 border border-slate-800">00:00</span>
+            </div>
+
+            <div class="rounded-xl overflow-hidden bg-black border border-slate-800">
+              <video id="video-player" controls class="w-full max-h-[340px] mx-auto"></video>
+            </div>
+
+            <!-- 12-Keyframe Thumbnail Strip -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-semibold text-slate-300">Sampled Keyframe Strip (Click any thumbnail to seek)</span>
+                <span id="video-mesh-badge" class="text-[11px] font-mono text-cyan-400">12 Frames</span>
+              </div>
+              <div id="video-timeline-bar" class="grid grid-cols-4 sm:grid-cols-6 gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800"></div>
+            </div>
+
+            <!-- Clickable Suspicious Timestamp Chips -->
+            <div class="space-y-2">
+              <h4 class="text-xs font-mono uppercase tracking-wider text-slate-400">Timestamped Anomaly &amp; Lip-Sync Events</h4>
+              <div id="video-timestamps-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-5 space-y-5" id="video-verdict-panel"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 3: VOICE & LIVE MIC DETECTOR ==================== -->
+    <section id="view-voice" class="app-view hidden space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <span class="text-xs font-mono text-purple-400">MODULE 02 // MULTI-WINDOW FFT + 2D STFT SPECTROGRAM</span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">AI Voice &amp; Audio Deepfake Detector</h2>
+          <p class="text-sm text-slate-400 mt-1">Analyzes start, middle, and end speech windows for &gt;7.5 kHz vocoder cutoffs, Wiener spectral flatness, and renders a 2D STFT spectrogram.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="AudioForensics.generateSample('synthetic')" class="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-xs font-semibold text-rose-300 transition">Test Sample: Vocoder Cutoff</button>
+          <button onclick="AudioForensics.generateSample('authentic')" class="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-xs font-semibold text-emerald-300 transition">Test Sample: Natural Broadband</button>
+        </div>
+      </div>
+
+      <div class="grid lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 glass-card rounded-2xl p-6">
+          <div id="audio-dropzone" class="border-2 border-dashed border-slate-700 hover:border-purple-400/60 rounded-2xl p-8 text-center transition cursor-pointer" onclick="document.getElementById('audio-file-input').click()">
+            <input type="file" id="audio-file-input" accept="audio/mpeg,audio/wav,audio/x-m4a,audio/mp4,audio/aac,audio/ogg,audio/*" class="hidden" onchange="AudioForensics.handleUpload(event)" />
+            <div class="w-14 h-14 rounded-2xl bg-purple-500/15 border border-purple-400/30 flex items-center justify-center text-purple-400 mx-auto mb-4">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+            </div>
+            <p class="text-base font-bold text-white">Drop Voice Recording or Audio Clip</p>
+            <p class="text-xs text-slate-400 mt-1">Supports MP3, WAV, M4A, MP4, AAC, OGG</p>
+            <button type="button" class="mt-4 px-4 py-2 rounded-xl bg-purple-500/20 border border-purple-400/40 text-xs font-semibold text-purple-200">Select Audio File</button>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <span class="text-xs font-mono text-cyan-400 font-semibold">CROSS-BROWSER LIVE MIC</span>
+            <h3 class="text-base font-bold text-white mt-1">Record Voice Sample</h3>
+            <p class="text-xs text-slate-400 mt-1">Supports Chrome, Edge &amp; macOS Safari (auto webm/mp4 codec fallback).</p>
+          </div>
+          <div class="my-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-center">
+            <span id="mic-timer" class="text-lg font-mono font-bold text-slate-300">00:00</span>
+            <p id="mic-status-text" class="text-[11px] text-slate-500 mt-0.5">Ready to record</p>
+          </div>
+          <button id="mic-record-btn" onclick="AudioForensics.toggleMicRecording()" class="w-full py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 text-xs font-semibold transition">Start Microphone Recording</button>
+        </div>
+      </div>
+
+      <!-- Audio Results -->
+      <div id="audio-results-container" class="hidden space-y-6">
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-7 glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-sm font-bold text-white">Waveform + 2D STFT Frequency Spectrogram</h3>
+              <span class="text-[11px] font-mono text-slate-400">Bands: 0–4kHz | 4–7.5kHz | &gt;7.5kHz</span>
+            </div>
+
+            <!-- Dual Waveform + 2D STFT Spectrogram Canvas -->
+            <canvas id="audio-spectrogram-canvas" class="w-full h-64 rounded-xl bg-[#040812] border border-slate-800 cursor-pointer"></canvas>
+            <audio id="audio-player" controls class="w-full"></audio>
+
+            <div id="audio-metrics-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1"></div>
+
+            <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200/90 leading-relaxed">
+              <strong>Biometric Scope Notice:</strong> DeepGuard AI evaluates acoustic synthesis artifacts (vocoder rolloff, spectral flatness, ZCR stability). It does <strong>not</strong> verify speaker identity ownership.
+            </div>
+          </div>
+
+          <div class="lg:col-span-5 space-y-5" id="audio-verdict-panel"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 4: IMAGE ELA & AI DETECTOR ==================== -->
+    <section id="view-image" class="app-view hidden space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <span class="text-xs font-mono text-blue-400">MODULE 03 // ELA REVIEW + DETECTRA IMAGE MODEL + VISUAL-STYLE SIGNAL</span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Image Signals &amp; Metadata Review</h2>
+          <p class="text-sm text-slate-400 mt-1">Inspect JPEG recompression patterns, visual style indicators, and embedded metadata. These signals can guide a closer review but cannot prove how an image was created or edited.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="ImageForensics.generateSample('spliced')" class="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/35 text-xs font-semibold text-rose-300 transition">Test Sample: Spliced + AI Tag</button>
+          <button onclick="ImageForensics.generateSample('anime')" class="px-3.5 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-xs font-semibold text-purple-300 transition">Test Sample: Anime / Fictional Art</button>
+          <button onclick="ImageForensics.generateSample('clean')" class="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-xs font-semibold text-emerald-300 transition">Test Sample: Camera Natural</button>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl p-6">
+        <div id="image-dropzone" class="border-2 border-dashed border-slate-700 hover:border-blue-400/60 rounded-2xl p-8 text-center transition cursor-pointer" onclick="document.getElementById('image-file-input').click()">
+          <input type="file" id="image-file-input" accept="image/jpeg,image/png,image/webp,image/*" class="hidden" onchange="ImageForensics.handleUpload(event)" />
+          <div class="w-14 h-14 rounded-2xl bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-400 mx-auto mb-4">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z"/></svg>
+          </div>
+          <p class="text-base font-bold text-white">Drop Image for Before/After ELA Split &amp; EXIF/C2PA Forensics</p>
+          <p class="text-xs text-slate-400 mt-1">Supports JPG, JPEG, PNG, WEBP</p>
+          <button type="button" class="mt-4 px-4 py-2 rounded-xl bg-blue-500/20 border border-blue-400/40 text-xs font-semibold text-blue-200">Select Image File</button>
+        </div>
+      </div>
+
+      <!-- Image Results -->
+      <div id="image-results-container" class="hidden space-y-6">
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-7 glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-sm font-bold text-white">Interactive Before / After ELA Split Inspector</h3>
+              <span class="text-[11px] font-mono text-cyan-300">Left: Original | Right: ELA Heatmap</span>
+            </div>
+
+            <!-- Interactive Split, Boost & Opacity Controls -->
+            <div class="grid sm:grid-cols-3 gap-3 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs">
+              <div>
+                <div class="flex justify-between font-mono text-[11px] text-cyan-300 mb-1">
+                  <span>Split Divider</span>
+                  <span id="ela-split-val">50%</span>
+                </div>
+                <input type="range" id="ela-split-slider" min="0" max="100" value="50" oninput="ImageForensics.renderSplitComposite()" class="w-full accent-cyan-400 cursor-pointer" />
+              </div>
+              <div>
+                <div class="flex justify-between font-mono text-[11px] text-purple-300 mb-1">
+                  <span>ELA Boost</span>
+                  <span id="ela-boost-val">16x</span>
+                </div>
+                <input type="range" id="ela-boost-slider" min="5" max="30" value="16" oninput="ImageForensics.recomputeElaBoost()" class="w-full accent-purple-400 cursor-pointer" />
+              </div>
+              <div>
+                <div class="flex justify-between font-mono text-[11px] text-emerald-300 mb-1">
+                  <span>Heatmap Opacity</span>
+                  <span id="ela-opacity-val">90%</span>
+                </div>
+                <input type="range" id="ela-opacity-slider" min="10" max="100" value="90" oninput="ImageForensics.renderSplitComposite()" class="w-full accent-emerald-400 cursor-pointer" />
+              </div>
+            </div>
+
+            <div class="rounded-xl overflow-hidden bg-[#040812] border border-slate-800 flex items-center justify-center p-2">
+              <canvas id="image-ela-canvas" class="max-w-full max-h-[420px] rounded-lg cursor-ew-resize"></canvas>
+            </div>
+
+            <!-- Separate heuristic visual-style and localized compression signals -->
+            <div id="image-dual-distinction" class="grid sm:grid-cols-2 gap-3"></div>
+          </div>
+
+          <div class="lg:col-span-5 space-y-5" id="image-verdict-panel"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 5: MULTI-FORMAT DOCUMENT & LINK VERIFIER ==================== -->
+    <section id="view-doclink" class="app-view hidden space-y-6">
+      <div>
+        <span class="text-xs font-mono text-emerald-400">MODULE 04 // PDF.JS + MAMMOTH.JS STYLOMETRY &amp; URL HOMOGRAPH INSPECTOR</span>
+        <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Document &amp; Link / Reel Verifier</h2>
+        <p class="text-sm text-slate-400 mt-1">Upload .PDF, .DOCX, .TXT, .MD, or .CSV files to extract full text and highlight uniform AI-patterned sentences, or inspect URLs for homograph spoofing and redirects.</p>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <!-- Multi-Format Document Analyzer -->
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              Multi-Format Document AI Detector
+            </h3>
+            <button onclick="DocLinkForensics.loadSampleText()" class="text-xs font-mono text-cyan-400 hover:underline">Load Sample AI Text</button>
+          </div>
+
+          <div class="border border-dashed border-slate-700 hover:border-emerald-400/60 rounded-xl p-4 text-center cursor-pointer transition" onclick="document.getElementById('doc-file-input').click()">
+            <input type="file" id="doc-file-input" accept=".pdf,.docx,.txt,.md,.csv" class="hidden" onchange="DocLinkForensics.handleFileUpload(event)" />
+            <p class="text-xs font-semibold text-slate-200">Upload .PDF, .DOCX, .TXT, .MD, or .CSV Document</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Parsed client-side via PDF.js &amp; Mammoth.js</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Extracted or Pasted Text:</label>
+            <textarea id="doc-text-input" rows="6" placeholder="Upload a PDF/DOCX or paste at least 40 words here to evaluate burstiness, TTR lexical diversity, 3-gram repetition, and sentence-starter uniformity..." class="w-full rounded-xl bg-slate-950/90 border border-slate-800 p-3.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-400 leading-relaxed"></textarea>
+          </div>
+
+          <button onclick="DocLinkForensics.analyzeTextInput()" class="w-full py-2.5 rounded-xl cyber-btn-primary text-xs sm:text-sm">Run Stylometry &amp; Highlight Uniform Sentences</button>
+        </div>
+
+        <!-- Link & Social Reel Verifier -->
+        <div class="glass-card rounded-2xl p-6 space-y-4 flex flex-col justify-between">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                Media Link &amp; Social Reel Verifier
+              </h3>
+              <span class="text-[11px] font-mono text-slate-400">Homograph + Redirect Check</span>
+            </div>
+
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Inspects HTTPS transport, punycode/IDN homograph spoofing (<code>xn--</code>), high-risk TLDs, and hidden redirect/tracking parameters.
+            </p>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1.5">Target Media or Social Reel URL</label>
+              <input type="url" id="link-url-input" placeholder="https://www.instagram.com/reel/... or https://xn--..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs font-mono text-cyan-200 focus:outline-none focus:border-cyan-400" />
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button onclick="document.getElementById('link-url-input').value='https://www.instagram.com/reel/C9xSampleReelID/?utm_source=ig_web_copy_link&igsh=abc123'" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-400 hover:text-cyan-300">Sample Reel URL</button>
+              <button onclick="document.getElementById('link-url-input').value='http://xn--paypa1-security-94a.xyz/login?redirect=https://evil.example/voice.mp3'" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-400 hover:text-rose-300">Sample Homograph + Redirect</button>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-4">
+            <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 leading-relaxed">
+              <strong class="text-cyan-300">CORS Integrity Policy:</strong> Social platforms block browser cross-origin binary downloads. DeepGuard AI never fabricates a score from a URL string alone—download the MP4 Reel and analyze it in the Video Detector.
+            </div>
+            <button onclick="DocLinkForensics.analyzeUrl()" class="w-full py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-200 font-semibold text-xs sm:text-sm transition">Verify URL Security &amp; Redirects</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unified Doc/Link Output + Highlighted Sentences Panel -->
+      <div id="doclink-results-container" class="hidden space-y-6"></div>
+    </section>
+
+    <!-- ==================== VIEW 6: ANALYSIS DASHBOARD ==================== -->
+    <section id="view-dashboard" class="app-view hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <span class="text-xs font-mono text-cyan-400">LIVE WORKSPACE TELEMETRY</span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Forensic Analysis Dashboard</h2>
+          <p class="text-sm text-slate-400 mt-1">Real-time statistics derived strictly from verified scans in your active workspace.</p>
+        </div>
+        <button onclick="UIController.navigateTo('video')" class="cyber-btn-primary px-4 py-2.5 rounded-xl text-xs font-bold self-start sm:self-auto">+ New Forensic Scan</button>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3.5">
+        <div class="glass-card rounded-2xl p-4"><p class="text-[11px] font-mono text-slate-400">TOTAL SCANS</p><p id="kpi-total" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+        <div class="glass-card rounded-2xl p-4"><p class="text-[11px] font-mono text-cyan-400">VIDEO / REEL</p><p id="kpi-video" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+        <div class="glass-card rounded-2xl p-4"><p class="text-[11px] font-mono text-purple-400">VOICE / AUDIO</p><p id="kpi-voice" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+        <div class="glass-card rounded-2xl p-4"><p class="text-[11px] font-mono text-blue-400">IMAGES</p><p id="kpi-image" class="text-2xl font-extrabold text-white mt-1">0</p></div>
+        <div class="glass-card rounded-2xl p-4"><p class="text-[11px] font-mono text-rose-400">MANIPULATED / AI</p><p id="kpi-manipulated" class="text-2xl font-extrabold text-rose-400 mt-1">0</p></div>
+        <div class="glass-card rounded-2xl p-4"><p class="text-[11px] font-mono text-emerald-400">AUTHENTIC</p><p id="kpi-authentic" class="text-2xl font-extrabold text-emerald-400 mt-1">0</p></div>
+        <div class="glass-card rounded-2xl p-4 col-span-2 sm:col-span-1"><p class="text-[11px] font-mono text-amber-400">INCONCLUSIVE</p><p id="kpi-inconclusive" class="text-2xl font-extrabold text-amber-400 mt-1">0</p></div>
+      </div>
+
+      <div id="dashboard-empty-state" class="glass-card rounded-2xl p-10 text-center border border-dashed border-slate-700">
+        <h3 class="text-base font-bold text-white">No Forensic Scans Recorded Yet</h3>
+        <p class="text-xs text-slate-400 max-w-md mx-auto mt-1.5 leading-relaxed">
+          DeepGuard AI starts at zero and never displays fabricated metrics. Run a Video, Voice, Image, or Document scan to populate live charts.
+        </p>
+      </div>
+
+      <div id="dashboard-charts-grid" class="hidden space-y-6">
+        <div class="grid lg:grid-cols-3 gap-6">
+          <div class="glass-card rounded-2xl p-5"><h3 class="text-sm font-bold text-white mb-4">Verdict Distribution</h3><div class="h-56"><canvas id="chart-verdicts"></canvas></div></div>
+          <div class="glass-card rounded-2xl p-5"><h3 class="text-sm font-bold text-white mb-4">Scans by Modality</h3><div class="h-56"><canvas id="chart-modalities"></canvas></div></div>
+          <div class="glass-card rounded-2xl p-5"><h3 class="text-sm font-bold text-white mb-4">Fraud Risk Tiers</h3><div class="h-56"><canvas id="chart-risks"></canvas></div></div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 overflow-x-auto">
+          <h3 class="text-sm font-bold text-white mb-4">Recent Forensic Activity</h3>
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 font-mono">
+                <th class="py-2.5 px-3">ANALYSIS ID</th>
+                <th class="py-2.5 px-3">FILE / TARGET</th>
+                <th class="py-2.5 px-3">MODALITY</th>
+                <th class="py-2.5 px-3">VERDICT</th>
+                <th class="py-2.5 px-3">RISK TIER</th>
+                <th class="py-2.5 px-3">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-recent-tbody" class="divide-y divide-slate-800/70"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 7: MEDIA & C2PA VERIFICATION ==================== -->
+    <section id="view-verify" class="app-view hidden space-y-6">
+      <div>
+        <span class="text-xs font-mono text-cyan-400">CRYPTOGRAPHIC PROVENANCE &amp; BINARY CONTAINER INSPECTOR</span>
+        <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Media Metadata, EXIF/XMP &amp; C2PA Verification</h2>
+        <p class="text-sm text-slate-400 mt-1">Extracts SHA-256 hashes, EXIF camera make/model, software tags, timestamps, and C2PA JUMBF Content Credentials.</p>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="text-base font-bold text-white">1. EXIF / XMP / C2PA Binary Inspector</h3>
+          <div class="border-2 border-dashed border-slate-700 hover:border-cyan-400/60 rounded-2xl p-6 text-center cursor-pointer transition" onclick="document.getElementById('verify-file-input').click()">
+            <input type="file" id="verify-file-input" class="hidden" onchange="CryptoMeta.handleStandaloneVerify(event)" />
+            <p class="text-sm font-bold text-white">Drop Any Media File (Image, Video, Audio, PDF)</p>
+            <p class="text-xs text-slate-400 mt-1">Parses binary EXIF fields, camera make/model, software tags &amp; C2PA markers</p>
+          </div>
+          <div id="verify-single-result" class="hidden space-y-3"></div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 space-y-4">
+          <h3 class="text-base font-bold text-white">2. Dual-File Cryptographic Comparator</h3>
+          <p class="text-xs text-slate-400">Compare an original source asset against a suspected re-encoded or tampered copy.</p>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-center cursor-pointer hover:border-cyan-400/50 transition" onclick="document.getElementById('compare-file-a').click()">
+              <input type="file" id="compare-file-a" class="hidden" onchange="CryptoMeta.handleCompareFile('A', event)" />
+              <p class="text-xs font-mono text-cyan-400">REFERENCE FILE A</p>
+              <p id="compare-name-a" class="text-xs text-slate-300 mt-1 truncate">Click to select File A</p>
+            </div>
+            <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-center cursor-pointer hover:border-purple-400/50 transition" onclick="document.getElementById('compare-file-b').click()">
+              <input type="file" id="compare-file-b" class="hidden" onchange="CryptoMeta.handleCompareFile('B', event)" />
+              <p class="text-xs font-mono text-purple-400">SUSPECT FILE B</p>
+              <p id="compare-name-b" class="text-xs text-slate-300 mt-1 truncate">Click to select File B</p>
+            </div>
+          </div>
+          <div id="compare-result-box" class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+            Select both files to compute side-by-side SHA-256 digests and byte deltas.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 8: SCAN HISTORY ==================== -->
+    <section id="view-history" class="app-view hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <span class="text-xs font-mono text-cyan-400">USER-ISOLATED FORENSIC ARCHIVE</span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Forensic Scan History</h2>
+          <p class="text-sm text-slate-400 mt-1">Active workspace: <span id="history-workspace-label" class="font-mono text-cyan-300">Guest Sandbox</span></p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <input type="text" id="history-search" oninput="HistoryStore.renderHistoryView()" placeholder="Search file or ID..." class="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400" />
+          <select id="history-filter" onchange="HistoryStore.renderHistoryView()" class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-cyan-400">
+            <option value="ALL">All Modalities</option>
+            <option value="Video">Video &amp; Reel</option>
+            <option value="Voice">Voice &amp; Audio</option>
+            <option value="Image">Image</option>
+            <option value="Document">Document</option>
+            <option value="Link">Link / URL</option>
+          </select>
+          <button onclick="HistoryStore.confirmClearHistory()" class="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-xs font-semibold text-rose-300 transition">Clear History</button>
+        </div>
+      </div>
+
+      <div id="history-list-container" class="space-y-3"></div>
+    </section>
+
+    <!-- ==================== VIEW 9: AWARENESS & ARCHITECTURE ==================== -->
+    <section id="view-awareness" class="app-view hidden space-y-6">
+      <div>
+        <span class="text-xs font-mono text-purple-400">CLIENT-SIDE ML PIPELINE &amp; CYBERSECURITY ETHICS</span>
+        <h2 class="text-2xl sm:text-3xl font-bold text-white mt-1">Deepfake Awareness &amp; Static GitHub Pages Architecture</h2>
+        <p class="text-sm text-slate-400 mt-1">How local signal analysis, the optional Detectra image model, and MediaPipe landmarks run in the browser.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="glass-card rounded-2xl p-6 space-y-3">
+          <h3 class="text-base font-bold text-white">Browser ML &amp; Fallback Engine Design</h3>
+          <ul class="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+            <li class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <strong class="text-cyan-300">Inline Blob Web Worker (`WorkerML`):</strong> Loads <code>@huggingface/transformers</code> via jsDelivr ES modules with automatic <code>webgpu → wasm</code> fallback so the main UI thread never freezes.
+            </li>
+            <li class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <strong class="text-purple-300">MediaPipe FaceLandmarker (`@mediapipe/tasks-vision`):</strong> Tracks 478 3D facial vertices and <code>jawOpen</code> / <code>mouthClose</code> blendshapes across 12 keyframes for true audio-video lip-sync correlation.
+            </li>
+            <li class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <strong class="text-emerald-300">Offline Fallback:</strong> If the image model or MediaPipe files cannot load, local ELA, metadata, stylometry, and DSP checks remain available. Image model results are marked unavailable rather than guessed.
+            </li>
+          </ul>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 space-y-3">
+          <h3 class="text-base font-bold text-white">Privacy Guarantee &amp; Model Limitations</h3>
+          <ul class="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+            <li class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <strong class="text-emerald-300">Local Media Processing:</strong> Media is processed in browser memory and is not uploaded to a DeepGuard server. App libraries and optional model files are fetched from public CDNs.
+            </li>
+            <li class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <strong class="text-amber-300">Anomaly Index ≠ Certainty:</strong> Automated scores reflect measured signal and neural deviations—always verify financial or identity requests via a secondary trusted channel.
+            </li>
+            <li class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <strong class="text-rose-300">Metadata Stripping Context:</strong> Social platforms strip EXIF and C2PA manifests during recompression; missing metadata alone is never treated as proof of forgery.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 bg-[#040711] mt-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+      <div><span class="font-bold text-white">DeepGuard <span class="text-cyan-400">AI</span></span> • Client-Side Multimodal Deepfake Detection &amp; Media Verification</div>
+      <div class="flex flex-wrap items-center gap-5">
+        <button onclick="UIController.navigateTo('awareness')" class="hover:text-cyan-400 transition">Architecture</button>
+        <button onclick="UIController.navigateTo('awareness')" class="hover:text-cyan-400 transition">Zero-Upload Privacy</button>
+        <button onclick="UIController.navigateTo('verify')" class="hover:text-cyan-400 transition">C2PA Provenance</button>
+      </div>
+    </div>
+  </footer>
+
+  <div id="pdf-qr-staging" class="hidden"></div>
+
+  <!-- ==================== MODULAR JAVASCRIPT ARCHITECTURE ==================== -->
+  <script src="./js/app.js"></script>
+</body>
+</html>

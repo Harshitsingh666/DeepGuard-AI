@@ -36,9 +36,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          # Deploy only the static frontend; the Node.js backend is not hosted on Pages.
+          path: './frontend'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
-

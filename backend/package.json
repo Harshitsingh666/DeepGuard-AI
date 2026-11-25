@@ -1,0 +1,12 @@
+{
+  "name": "deepguard-ai-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Node.js server and health API for DeepGuard AI",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
